@@ -1,0 +1,158 @@
+# Default values for maxscale-helm.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+image:
+  repository: youruser/maxscale-keepalived
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: latest
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: 
+  privileged: true
+  capabilities:
+    add:
+      - NET_ADMIN
+      - NET_RAW
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+
+# This maxscale configuration will be the same for both maxscales
+maxscaleConfiguration: |-
+  # Globals
+  [maxscale]
+  threads=1
+  # Servers
+  [server1]
+  type=server
+  # UPDATE ADDRESS TO CLUSTER IP OF GALERA 1 
+  address=10.96.129.73
+  port=3306
+  protocol=MySQLBackend
+  [server2]
+  type=server
+  # UPDATE ADDRESS TO CLUSTER IP OF GALERA 2 
+  address=10.96.23.75
+  port=3306
+  protocol=MySQLBackend
+  # Monitoring for the servers
+  [Galera Monitor]
+  type=monitor
+  module=galeramon
+  servers=server1, server2
+  user= maxscaleuser
+  passwd= maxscaleuser12
+  monitor_interval=1000
+  # Galera router service
+  [Galera Service]
+  type=service
+  router=readwritesplit
+  servers=server1, server2
+  user= maxscaleuser
+  passwd= maxscaleuser12
+  # Galera cluster listener
+  [Galera Listener]
+  type=listener
+  service=Galera Service
+  protocol=MySQLClient
+  port=3306
+
+keepalivedMasterConfiguration: |-
+  vrrp_instance VI_1 {
+  state MASTER
+  interface eth0
+  virtual_router_id 51
+  priority 100
+  advert_int 1
+  authentication {
+  auth_type PASS
+  auth_pass 1111
+  }
+  virtual_ipaddress {
+  10.96.11.15/24
+  }
+  }
+
+keepalivedSlaveConfiguration: |-
+  vrrp_instance VI_1 {
+  state BACKUP
+  interface eth0
+  virtual_router_id 51
+  priority 99
+  advert_int 1
+  authentication {
+  auth_type PASS
+  auth_pass 1111
+  }
+  virtual_ipaddress {
+  10.96.11.15/24
+  }
+  }
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

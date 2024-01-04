@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "maxscale-helm.fullname" . }}
+  labels:
+    {{- include "maxscale-helm.labels" . | nindent 4 }}
+spec:
+  serviceName: "{{ include "maxscale-helm.fullname" . }}"
+  replicas: 2 # for master and slave
+  selector:
+    matchLabels:
+      {{- include "maxscale-helm.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "maxscale-helm.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "maxscale-helm.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      volumes:
+        - name: maxscale-config-volume
+          configMap:
+            name: {{ include "maxscale-helm.fullname" . }}-config
+        - name: keepalived-config-volume
+          configMap:
+            name: {{ include "maxscale-helm.fullname" . }}-keepalived-config
+        - name: keepalived-configs-final
+          emptyDir: {}
+      initContainers:
+        - name: init-keepalived
+          image: busybox
+          command:
+            - sh
+            - -c
+            - |
+              mkdir -p /etc/keepalived
+              # Determine which config to use depending on the hostname. STS uses 2 replicas where 0 is master and 1 is backup for the maxscale VIP cluster
+              if [ $(hostname | grep -o "[0-9]*$") -eq 0 ]; then
+                cp /configs/keepalivedMaster.conf /etc/keepalived/keepalived.conf;
+              else
+                cp /configs/keepalivedSlave.conf /etc/keepalived/keepalived.conf;
+              fi
+          volumeMounts:
+            - name: keepalived-config-volume
+              mountPath: /configs
+            - name: keepalived-configs-final
+              mountPath: /etc/keepalived
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          volumeMounts:
+            - name: maxscale-config-volume
+              mountPath: /etc/maxscale.cnf
+              subPath: maxscale.cnf
+            - name: keepalived-configs-final
+              mountPath: /etc/keepalived/
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

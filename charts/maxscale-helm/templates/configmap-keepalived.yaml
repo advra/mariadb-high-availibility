@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "maxscale-helm.fullname" . }}-keepalived-config
+  labels:
+    {{- include "maxscale-helm.labels" . | nindent 4 }}
+data:
+{{- if .Values.keepalivedMasterConfiguration }}
+  keepalivedMaster.conf: |
+{{ .Values.keepalivedMasterConfiguration | indent 4 }}
+{{- end }}
+{{- if .Values.keepalivedSlaveConfiguration }}
+  keepalivedSlave.conf: |
+{{ .Values.keepalivedSlaveConfiguration | indent 4 }}
+{{- end }}
